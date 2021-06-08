@@ -58,5 +58,3 @@ Number of Compressors : 2
 Total Cost            : 571950232.5104828
 Elec Cost             : 226109222.5317595
 ~~~~
-
-### Dual_Chambered_Mug.py
