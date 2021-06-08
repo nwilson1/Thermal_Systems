@@ -1,0 +1,114 @@
+\documentclass[12pt]{report}
+\usepackage[margin=1in,lmargin=1in,rmargin=1in,tmargin=1in]{geometry}
+\usepackage{caption,graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{dblfloatfix}
+\captionsetup[figure]{font=small,labelfont=small}
+\newcommand{\fig}[1]{Fig. \ref{#1}}
+\begin{document}
+
+\noindent Noah Wilson
+
+\noindent Regenerator.py Report
+
+\noindent 2/23/20
+\vspace{0.5cm}
+
+I modeled the cycle in Python as a standard Brayton cycle with a low pressure of 0.1 MPa, cold exhaust temperature of 300 K, and post-combustion temperature of 1500 K, and a work output of 10 MW.  The working fluid was dry air.  The high pressure output from the compressor ($P_{high}$) was left as a parameter for optimization.  The rotary regenerator has a hot intake, cold intake, hot output, and cold output.  The hot intake is at the same state as the turbine exhaust, and the cold intake is at the same state as the compressor output. 
+
+ The regenerator has five parameters that can be chosen: wheel diameter ($D$), wheel length ($L$), side length of each triangular channel ($2a$), and the thickness of the material used to construct the channels ($t$), and the wheel rotational rate ($\omega$).  The channels were assumed to be equilateral triangles made by corrugation of the metal plate.  Other relevant parameters to the regenerator model were hot intake temperature ($T_{h,i}$), cold intake temperature ($T_{c,i}$), hot output temperature ($T_{h,o}$), cold output temperature ($T_{c,o}$), cold-to-hot mass flow rate ($\dot{m}_c$), and hot-to-cold mass flow rate ($\dot{m}_h$).  All of these parameters are labeled in the figure below.
+\begin{figure}[ht]
+	\centering
+	\includegraphics[width=\linewidth]{Wheel.png}
+	\captionsetup{width=\linewidth}
+	\caption{Side view of the rotary regenerator wheel (left) and a sample section of the corrugated geometry (right).}
+	\label{fig:wheel}
+\end{figure} 
+To find the states of the output air from the regenerator, I had to find $T_{h,o}$, $T_{c,o}$, as well as the pressure drop across the wheel in both streams.  
+
+The most accurate method to determine the change in temperature of the gas across the regenerator would be to numerically solve the system of PDEs that describe it, but I opted for a simplified model in the interest of time.  While this choice may have reduced the accuracy of the simulation, I am confident the essential behaviors were preserved.  The wheel was modeled using an $\epsilon$-NTU correlation. The model I used in my code is a hybrid of a couple of different analyses of rotary regenerators \cite{abdul06,nelli09}.
+
+The effectiveness of the wheel is given by 
+\begin{equation}
+\epsilon = \frac{NTU_0}{1+NTU_0}\frac{1}{9C_r^{*1.93}}
+\end{equation}
+ where
+ \begin{equation}
+C_r^* = \frac{2Mc_r\omega}{C_{min}}
+\end{equation}
+is the heat capacity rate of the wheel normalized to the minimum isobaric heat capacity of the hot and cold air streams ($C_{min}=min(C_{p,h},C_{p,c})$), $M$ is the mass of the wheel, and $c_r$ is the specific heat capacity of the wheel material.  The value $NTU_0$ is the combined number of transfer units for the hot and cold streams together given by 
+ \begin{equation}
+NTU_0 = \frac{1}{C_{min}}\biggr(\frac{1}{h_h A_s} + \frac{1}{h_c A_s}\biggl)
+\end{equation}
+where $h_h$ and $h_c$ are the convective heat transfer coefficients of the hot and cold streams respectively, and $A_s$ is the total heat transfer surface area of the wheel given by
+ \begin{equation}
+A_s = PLN_c = PL\frac{A_f}{A_c+3at}=A_fL\frac{6a}{\sqrt{3}a^2 + 3at}=\frac{\pi D^2L}{4}\frac{6}{\sqrt{3}a+3t}
+\end{equation}
+The heat transfer coefficients are determined by the Nusselt number ($Nu$), the thermal conductivity of the gas ($k$), and the hydraulic diameter of the channels ($D_h$).  
+\begin{equation}
+h = \frac{k\cdot Nu}{D_h}
+\end{equation}
+
+For laminar flows along a smooth triangular pipe with constant heat flux, $Nu = 3.11$ \cite{dewit07}.  The hydraulic diameter is given by 
+\begin{equation}
+D_h = 4\frac{A_c}{P} 
+\end{equation}
+With the effectiveness, the heat transfer rate of the regenerator can be determined as 
+\begin{equation}
+\dot{q} = \epsilon\dot{q}_{max}
+\end{equation}
+where $\dot{q}_{max}$ is the maximum heat transfer rate of the wheel.  To find $\dot{q}_{max}$, I used the following energy balance equations 
+\begin{align}
+\dot{q}_{max} &= Mc_r \frac{dT_w}{dt}\\
+Mc_r \frac{dT_w}{dt}& = \dot{m}_cc_{p,c}L\frac{dT_c}{dx}\\
+\dot{m}_hc_{p,h}L\frac{dT_h}{dx} &= -\dot{m}_cc_{p,c}L\frac{dT_c}{dx}
+\end{align}
+where $T_{w}$ is the temperature of wheel.  To solve this system, I made a few simplifying assumptions. 
+
+First, I assumed constant heat capacity and heat flow rate.  In addition, I assumed that, in the ideal case, the wheel and the output air would be in thermal equilibrium with the wheel on both sides when the air exited the regenerator.  So the energy balance can be expressed,
+\begin{align}
+\dot{q}_{max} &= 2Mc_r \omega (T_{wh} - T_{wc})\\
+2Mc_r \omega (T_{wh} - T_{wc})& = \dot{m}_cc_{p,c}(T_{wh} - T_{c,i})\\
+\dot{m}_hc_{p,h}(T_{wc} - T_{h,i}) &= -\dot{m}_cc_{p,c}(T_{wh} - T_{c,i})
+\end{align}
+The only unknowns are $T_{wc}$, $T_{wh}$, and $\dot{q}_{max}$, so with the three equations my code can solve for $\dot{q}_{max}$, and knowing $\epsilon$, $\dot{q}$ can be determined.  With $\dot{q}$, the actual output air temperatures can be calculated and used to define the output states of the regenerator.  
+
+The pressure drop was determined by finding the friction factor $f$.  For laminar flow, $f\cdot Re=16$, and the Reynolds number was calculated as 
+\begin{equation}
+Re = \frac{2\dot{m}D_h}{\mu A_v}
+\end{equation}
+where $A_v$ is the void area of the wheel given by
+\begin{equation}
+A_v = \phi A_f=N_cA_c
+\end{equation}
+Now the pressure drop is calculated 
+\begin{equation}
+\Delta P = \frac{2fL\dot{m}^2}{\rho D_hA_f^2}
+\end{equation}
+
+The pressure drop was calculated for both hot and cold streams separately.  Since the states needed to find the pressure drop are, in part, dependent on that pressure drop, the value of the pressure drop was calculated and then the system redefined using that pressure drop.  This was done iteratively until reaching equilibrium.  I also accounted for air leakage between the two streams such that 
+\begin{align}
+\dot{m}_{leak} &= A_vL\omega(\rho_c-\rho_h)\\
+\dot{m}_c& = \dot{m}_h+\dot{m}_{leak}
+\end{align}
+The mass flow rate in the hot stream, $\dot{m}_h$ was set equal to the mass flow rate through the turbine determined by the work output of the cycle. 
+
+I considered $P_{high}$, $a$, $t$, $D$, $L$ and $\omega$ all as potentially optimizable parameters.  Using a numerical optimization algorithm from the Python module SciPy, I found it possible to optimize $P_{high}$, $L$ and $\omega$ simultaneously given that I fixed the values of $a$, $t$, $D$ during the optimization.  To determine whether or not this was valid, I first tried to optimize $a$ an $t$ both with the SciPy algorithm and brute-force iteration.  In both cases, the attempt to optimize $a$ an $t$ failed, with efficiency increasing as both values became arbitrarily small.  If I set a lower bound, or placed some other constraint on $a$ an $t$ they would always trend toward the minimum allowable values.  
+
+I believe this result makes sense.  The greater the heat the regenerator is able to transfer between the two streams, the greater the efficiency of the cycle given a constant work output.  As both $a$ and $t$ become small, the surface area increases while the porosity of the wheel either remains constant or increases.  The greater the surface area, the more heat the air is able to transfer to the wheel and thus the more heat the regenerator is able to recover, thus increasing the efficiency.  Since the porosity does not change, there is presumably no obstruction of the mass flow, and it remains within the laminar regime.  There may be some other constraint on $a$ and $t$ that I have not considered, but barring that possibility, the values of $a$ an $t$ are likely constrained more by material properties and manufacturing limits rather than the thermal efficiency of the cycle.  So $a$ an $t$ were arbitrarily fixed to small, but reasonable, values: 1 mm and 0.1 mm respectively. 
+
+I also attempted to iteratively optimize $D$ alongside $P_{high}$, $L$ and $\omega$.  I would optimize $D$ while fixing $P_{high}$, $L$ and $\omega$, and vice-versa.  I used these new optimized values in another optimization iteration and iterated the process to see if an equilibrium was reached.  After only five iterations, the optimization failed, but this was enough to get a sense of how efficiency changes with $D$ while simultaneously optimizing the other parameters.  The efficiency versus the ``optimized'' values of $D$ are shown below. 
+\begin{figure}[ht]
+	\centering
+	\includegraphics[width=.8\linewidth]{Wheel_D.png}
+	\captionsetup{width=\linewidth}
+	\caption{Efficiency changes as diameter is iteratively optimized alongside $P_{high}$, $L$ and $\omega$.}
+	\label{fig:wheel}
+\end{figure} 
+The overall effect of wheel diameter is small.  Efficiency increased by less than 1\% even as the wheel more than doubled in diameter.  Also, the effect of diameter seemed to diminish as $D$ became large, but a large wheel still does result in higher efficiency.  So the diameter of the wheel was fixed to an arbitrary value that seemed sufficiently large, yet reasonable: 2 m.  
+
+With $a = 1$ mm, $t=0.1$ mm, and $D=2$ m, the values of $P_{high}$, $L$ and $\omega$ could be successfully optimized simultaneously.  The optimized values are $P_{high}=1.42$ MPa, $L=0.31$ m, and $\omega =0.17$ 1/s.  The optimized efficiency of the cycle with these parameters was 41.4\%, slightly more than half of the Carnot efficiency of 80\%.  If the regenerator was removed, but the cycle was modeled with the same $P_{high}=1.42$, the efficiency dropped to 37.9\%, meaning the regenerator improved efficiency by 3.5\% overall.  
+\nocite{*}
+\bibliographystyle{unsrt}
+\bibliography{biblio} 
+\end{document}
